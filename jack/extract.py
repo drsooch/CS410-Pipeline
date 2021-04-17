@@ -1,46 +1,51 @@
-# Useful link https://realpython.com/python-requests/
-#
-# Makes a simple request to the endpoint provided. Currently errors are printed
-# out, and valid requests return the json.
-#
-# todo: store results into a mongoDB, switch to logging?
-#
+from airflow.providers.http.hooks.http import HttpHook
+from airflow.providers.mongo.hooks.mongo import MongoHook
 
-import requests
+def extract(batch_id, 
+    method = "GET",
+    http_conn_id = "default_api",
+    mongo_conn_id = "default_mongo"):
 
-def extract(endpoint):
+    http = HttpHook(method, http_conn_id=http_conn_id)
 
-    try:
-        response = requests.get(endpoint)
-        #when adding in authentication, it may look something like this:
-        # response = requests.get(endpoint, auth=('username', getpass())
-
-    except Exception as error:
-        print(f'An exception has occurred. : Not able to connect to {endpoint}\n{error}')
-        return
+    mongo_conn = MongoHook(mongo_conn_id)
+    collection = mongo_conn.get_collection("ids_to_update")
 
 
-    #after successful API call, we can process the data
-    if response.status_code == 200:
-        return response.json()['results']
-    else:
-        print(f'Error Acessing {endpoint}.')
-        print(response)
+    #Note/TODO: because we add endpoints back that we couldn't handle, we may
+    #get stuck in an infinite loop. Another solution is exiting whenever an 
+    #exception occurs, but this isn't ideal either
+    while (mongo_conn.find("ids_to_update", { "batch_id": str(batch_id)}) != None):
 
+        #find a job to work on
+        result = collection.find_one_and_delete({ "batch_id": str(batch_id)})
+        api_id = result['api_id']
+        try: 
 
-#
-#Tests
-#
+            #transform to get a valid link
+            #TODO: this needs to be generalized to any website
+            endpoint = "https://www.courtlistener.com/api/rest/v3/opinions/?id=" + str(api_id)
 
-#invalid website 
-print("trying a website that doesn't exist: ")
-print(str(extract("https://www.courtzistener.com/api/rest/v3/"))+"\n")
+            #pull data in
+            response = http.run(endpoint)
 
-#valid website, but not a valid endpoint
-print("trying an invalid endpoint: ")
-print(str(extract("https://www.courtlistener.com/api/rest/v3/pizza-party/")) + "\n")
+            if response.status_code == 200:
 
-#A valid website, and a valid endpoint
-#should return json
-print("trying a real courtlistener endpoint: ")
-print(extract("https://www.courtlistener.com/api/rest/v3/dockets/?court__jurisdiction=F&court__jurisdiction=FD"))
+                #store our result into mongo
+                mongo_conn.insert_one("results_to_transform", 
+                    response.json()['results'],
+                    mongo_db="courts")
+
+            else:
+                #TODO: throw a more specific exception
+                raise Exception(f"Received {response.status_code} code from {endpoint}.")
+
+        except Exception as error:
+
+            #something went wrong. Log it and return this endpoint to mongoDB so we can try again
+
+             print(f'An exception occured while processing batch {batch_id}:\n{error}')
+
+            mongo_conn.insert_one("ids_to_update", 
+               {"api_id": str(api_id), "batch_id": str(batch_id)},
+                mongo_db="courts")
