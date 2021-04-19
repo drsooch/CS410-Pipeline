@@ -57,6 +57,7 @@ def build_data(data, mapping):
             output[key1] = build_data(data, key2)
         elif key2 != '':
             output[key1] = find_by_key(key2, data)
+        else: output[key1] = ''
     return output
 
 
