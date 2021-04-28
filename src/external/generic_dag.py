@@ -1,8 +1,117 @@
-#
-# Stub file for a Generic Dag implementing our pipeline structure.
-# This probably should be left in internal but exported through the pipeline
-# file at the top level
-# 
+import random
+from string import ascii_letters
+from typing import Any, Dict
 
-def generic_dag():
-    raise NotImplementedError
+from airflow import DAG
+from airflow.operators.python import ShortCircuitOperator
+from airflow.utils.dates import days_ago, timedelta
+
+from internal.paging_operator import APIPagingOperator
+
+default_args = {
+    "owner": "airflow",
+    "depends_on_past": False,
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 5,
+    "retry_delay": timedelta(seconds=25),
+    "number_of_batches": 5,
+    "log_response": True
+    # 'execution_timeout': timedelta(seconds=300),
+}
+
+# just some globals to keep around
+START_OP_ID = "start_op"
+EXTRACT_OP_ID = "extract_op_{}"
+TRANSFORM_OP_ID = "transform_op_{}"
+
+SKIP_KEY = "skip"
+
+
+# Not used as of now.
+# Python callable arguments for some reason get clobbered.
+# Even if the batch_name is set before the loop,
+# the PythonOperator seems to call this function again.
+def _generate_random_batch_name() -> str:
+    """Generates a random 10 letter batch string."""
+    return "".join(random.choices(ascii_letters, k=10))
+
+
+def _continue(batch_name, **kwargs):
+    """For use with ShortCircuitOperator. Checks to see if the APIOperator returns a SKIP Message."""
+    ti = kwargs["ti"]
+    should_continue = ti.xcom_pull(task_ids=START_OP_ID, key=SKIP_KEY)
+
+    # if there are updates to be done, we won't find a key
+    return should_continue is None
+
+
+def construct_paging_dag(
+    dag_id: str,
+    paging_args: Dict[str, Any],  # pass a dictionary of kwargs to PagingOp
+    key_map: Dict[str, Any],
+    extract_fn,  # TODO delete
+    transform_fn,  # TODO delete
+    start_date=days_ago(1),
+    schedule=None,
+    number_of_batches=5,
+    default_dag_args=None,
+):
+    """
+    Construct a DAG with an endpoint that responds with pages.
+
+    :param dag_id: DAG ID to name the DAG
+    :type dag_id: str
+    :param paging_args: Kwargs for APIPagingOperator
+    :type paging_args: dict
+    :param key_map: Map from API Response to Internal Data Model
+    :type key_map: dict
+    :param start_date: Date for DAG to start
+    :type start_date: str
+    :param schedule: Scheduling for DAG, see Airflow Docs.
+    :type str: str
+    :param number_of_batches: Number of Batches to use in the DAG.
+    :type number_of_batches: int
+    :param default_dag_args: Default Arguments to pass to DAG (and its operators)
+    :type default_dag_args: dict
+    """
+
+    if default_dag_args is None:
+        default_dag_args = default_args
+
+    dag = DAG(
+        dag_id=dag_id,
+        default_args=default_dag_args,
+        start_date=start_date,
+        schedule_interval=schedule,
+    )
+
+    start_op = APIPagingOperator(
+        task_id=START_OP_ID,
+        batch_name=dag_id,
+        **paging_args,
+        dag=dag,
+    )
+
+    no_results = ShortCircuitOperator(
+        task_id="no_results", python_callable=_continue, op_args=[dag_id]
+    )
+
+    start_op >> no_results
+
+    for batch_id in range(1, number_of_batches + 1):
+        extract = ExtractOperator(
+            task_id=EXTRACT_OP_ID.format(batch_id),
+            batch_name=dag_id,
+            batch_id=batch_id,
+        )
+
+        transform = ExtractOperator(
+            task_id=TRANSFORM_OP_ID.format(batch_id),
+            batch_name=dag_id,
+            batch_id=batch_id,
+        )
+
+        no_results >> extract >> transform
+
+    return dag
