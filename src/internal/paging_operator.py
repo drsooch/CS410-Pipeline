@@ -5,7 +5,7 @@ import requests
 from airflow.exceptions import AirflowException
 from airflow.utils.decorators import apply_defaults
 
-from api_operator import BaseAPIOperator
+from internal.api_operator import BaseAPIOperator
 
 # Much of the design of this Operator is based off the Airflow SimpleHTTPOperator.
 # It's been extended to allow for multiple requests in the event an API has "pages"
@@ -42,26 +42,27 @@ class APIPagingOperator(BaseAPIOperator):
     # setup and teardown
     def _execute(self, context: Dict[str, Any]) -> Any:
 
-        # self.http = HttpHook(self.method, http_conn_id=self.http_conn_id)
-
-        # generate random batch string, and get the number of batches
-        batch_name = self._generate_random_batch_name()
-        batch_id = 1
-
         # call main endpoint with starting query data
-        resp = self._call_once(use_query=True)
+        response_json = self._call_once(use_query=True)
 
-        # if this fails, we won't enter the loop anyways
-        if resp:
-            items_in_batch = math.ceil(
-                self.response_count(resp) / self.number_of_batches
-            )
-            curr_item_num = 0
-        else:
+        # error out on failure
+        if response_json is None:
             raise AirflowException(f"Failed request on Connection: {self.http_conn_id}")
 
+        resp_count = self.response_count(response_json)
+
+        if resp_count == 0:
+            self.log.info("No results found, skipping downstream")
+            context["ti"].xcom_push(key="skip", value=True)
+            return
+
         if self.log_response:
-            self.log.info(f"Processing {self.response_count(resp)} items.")
+            self.log.info(f"Processing {self.response_count(response_json)} items.")
+
+        # generate batch lengths
+        items_in_batch = math.ceil(resp_count / self.number_of_batches)
+        curr_item_num = 0
+        batch_id = 1
 
         while True:
 
@@ -69,7 +70,7 @@ class APIPagingOperator(BaseAPIOperator):
             # parse the incoming response
             # transform each subendpoint into a document
             # for insertion into MongoDB
-            for subendpoint in self.parser(resp):
+            for subendpoint in self.parser(response_json):
                 # if we've processed the amount of items in a batch
                 # reset counter and decrement batch_id
                 if curr_item_num == items_in_batch:
@@ -81,8 +82,9 @@ class APIPagingOperator(BaseAPIOperator):
                             f"Processed Batch {batch_id} out of {self.number_of_batches}...\n{batch_id * items_in_batch} items so far"
                         )
 
+                # add to list for insert_many
                 id_list.append(
-                    self._api_id_to_document(subendpoint, batch_name, batch_id)
+                    self._api_id_to_document(subendpoint, self.batch_name, batch_id)
                 )
 
                 curr_item_num += 1
@@ -91,40 +93,42 @@ class APIPagingOperator(BaseAPIOperator):
             self.mongo_conn.insert_many("ids_to_update", id_list, mongo_db="courts")
 
             # do we need to continue?
-            if not self.check_more(resp):
+            if not self.check_more(response_json):
                 break
 
-            # if the next page is a fully qualified url
-            # swap out the base url
-            # otherwise just update the endpoint
-            next_page = self.next_page(resp)
-
-            # FIXME: This is crap.
-            # CourtListener API returns the next page as the full url
-            # Since HttpHook uses a base connection id which derives from Airflow UI
-            # we cannot auto-update the base connection
-            # Something like may be better:
-            # for ch, ix in enumerate(next_page):
-            #   if self.http.base_url[ix] == ch:
-            #       continue
-            #   else
-            #       self.endpoint = self.next_page[ix:]
-            #       break
-            # This way we explicitly make sure the base url is the same
-            if "://" in next_page:
-                self.endpoint = next_page[len(self.http.base_url) :]
-            else:
-                self.endpoint = self.next_page(resp)
-
             # update response with next page
+            self._update_endpoint(response_json)
+
             # this time we don't need query data
-            resp = self._call_once()
+            response_json = self._call_once()
 
-        self._shutdown()
-
-        # for now just return the batch_name and number of batches created
-        return (batch_name, batch_id)
+        return None
 
     def _default_check_more(self) -> bool:
         """Default check_more() function. Always returns False."""
         return False
+
+    def _update_endpoint(self, response: dict):
+        """Update endpoint the HTTPHook is requesting from."""
+        next_page = self.next_page(response)
+
+        # if the next page is a fully qualified url
+        # swap out the base url
+        # otherwise just update the endpoint
+
+        # FIXME: This is crap.
+        # CourtListener API returns the next page as the full url
+        # Since HttpHook uses a base connection id which derives from Airflow UI
+        # we cannot auto-update the base connection
+        # Something like may be better:
+        # for ch, ix in enumerate(next_page):
+        #   if self.http.base_url[ix] == ch:
+        #       continue
+        #   else
+        #       self.endpoint = self.next_page[ix:]
+        #       break
+        # This way we explicitly make sure the base url is the same
+        if "://" in next_page:
+            self.endpoint = next_page[len(self.http.base_url) :]
+        else:
+            self.endpoint = next_page
