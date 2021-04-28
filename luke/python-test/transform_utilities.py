@@ -24,30 +24,38 @@
 #         'document_text': ''
 #     }
 # }
-#
 
 import json
 import uuid
+import hashlib
 
 
-def transform(input_string, mapping):
+def transform(input_string: str, mapping: dict, keys: list) -> str:
     """
     Takes a JSON formatted string and mapping.
     """
     data = json.loads(input_string, strict=False)
     output_data = build_data(data, mapping)
-    output_data = add_uuid(output_data)
+    uuid = generate_id(build_seed(data, keys))
+    output_data['id'] = uuid
     return json.dumps(output_data, indent=2)
 
-def add_uuid(data):
-    """
-    Adds a UUID to the Python dictionary.
-    """
-    data['id']= str(uuid.uuid4())
-    return data
+
+def generate_id(seed: str) -> str:
+    m = hashlib.md5()
+    m.update(seed.encode('utf-8'))
+    id = str(uuid.UUID(m.hexdigest()))
+    return id
 
 
-def build_data(data, mapping):
+def build_seed(data: dict, keys: list) -> str:
+    seed = ''
+    for key in keys:
+        seed += find_by_key(key, data)
+    return seed
+
+
+def build_data(data: dict, mapping: dict) -> dict:
     """
     Returns the transformed Python dictionary from a key mapping.
     """
@@ -61,7 +69,7 @@ def build_data(data, mapping):
     return output
 
 
-def find_by_key(target, data):
+def find_by_key(target: str, data: dict) -> str:
     """
     Returns the value of the target key from a nested Python dictionary.
     """
@@ -107,8 +115,11 @@ def main():
         }
     }
 
+    # List of keys from source data model to use to generate unique id
+    KEY_LIST = ['resource_uri', 'date_modified']
+
     # JSON formatted string output
-    output = transform(data_string, MAPPING)
+    output = transform(data_string, MAPPING, KEY_LIST)
     print(output)
 
 
