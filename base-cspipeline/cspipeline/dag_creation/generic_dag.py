@@ -3,10 +3,9 @@ from string import ascii_letters
 from typing import Any, Dict
 
 from airflow import DAG
-from airflow.operators.python import ShortCircuitOperator
+from airflow.operators.python import PythonOperator, ShortCircuitOperator
 from airflow.utils.dates import days_ago, timedelta
-
-from internal.paging_operator import APIPagingOperator
+from cspipeline.operators import APIPagingOperator, transform, extract
 
 default_args = {
     "owner": "airflow",
@@ -100,16 +99,17 @@ def construct_paging_dag(
     start_op >> no_results
 
     for batch_id in range(1, number_of_batches + 1):
-        extract = ExtractOperator(
+        extract = PythonOperator(
             task_id=EXTRACT_OP_ID.format(batch_id),
-            batch_name=dag_id,
-            batch_id=batch_id,
+            python_callable=extract,
+            op_args=[dag_id + str(batch_id)],
         )
 
-        transform = ExtractOperator(
+        ## FIXME: add Key and Mapping
+        transform = PythonOperator(
             task_id=TRANSFORM_OP_ID.format(batch_id),
-            batch_name=dag_id,
-            batch_id=batch_id,
+            python_callable=transform,
+            op_args=[dag_id + str(batch_id)],
         )
 
         no_results >> extract >> transform

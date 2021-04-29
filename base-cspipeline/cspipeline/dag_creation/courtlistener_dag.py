@@ -1,7 +1,15 @@
 from airflow.exceptions import AirflowException
-from airflow.utils.dates import datetime, timedelta, timezone, days_ago
+from airflow.utils.dates import datetime, days_ago, timedelta, timezone
+from cspipeline.scripts.courtlistener import (
+    check_more,
+    daily_query,
+    next_page,
+    parser,
+    response_count,
+    response_valid,
+)
 
-from external.generic_dag import construct_paging_dag
+from .generic_dag import construct_paging_dag
 
 
 def daily_query():

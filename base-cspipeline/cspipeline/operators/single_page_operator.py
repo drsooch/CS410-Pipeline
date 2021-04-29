@@ -4,7 +4,7 @@ from typing import Any, Dict
 from airflow.exceptions import AirflowException
 from airflow.utils.decorators import apply_defaults
 
-from internal.api_operator import BaseAPIOperator
+from .api_operator import BaseAPIOperator
 
 
 class APISinglePageOperator(BaseAPIOperator):

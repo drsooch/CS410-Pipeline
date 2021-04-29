@@ -5,7 +5,7 @@ import requests
 from airflow.exceptions import AirflowException
 from airflow.utils.decorators import apply_defaults
 
-from internal.api_operator import BaseAPIOperator
+from .api_operator import BaseAPIOperator
 
 # Much of the design of this Operator is based off the Airflow SimpleHTTPOperator.
 # It's been extended to allow for multiple requests in the event an API has "pages"

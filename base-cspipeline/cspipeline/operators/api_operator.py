@@ -1,14 +1,13 @@
 import random
+from json import JSONDecodeError
 from string import ascii_letters
 from typing import Any, Callable, Dict, Optional, Union
 
 import requests
-from json import JSONDecodeError
 from airflow.models.baseoperator import BaseOperator
 from airflow.providers.http.hooks.http import HttpHook
 from airflow.providers.mongo.hooks.mongo import MongoHook
 from airflow.utils.decorators import apply_defaults
-
 
 ##########################################################
 # Derived Classes should implement the _execute function #
@@ -47,7 +46,6 @@ class BaseAPIOperator(BaseOperator):
     @apply_defaults
     def __init__(
         self,
-        batch_name: str,
         endpoint: str,
         parser: Callable[
             [requests.Response], list
@@ -70,7 +68,6 @@ class BaseAPIOperator(BaseOperator):
         super().__init__(**kwargs)
 
         self.number_of_batches = number_of_batches
-        self.batch_name = batch_name
 
         # API endpoint information, we should only be making GET requests from here
         # Header is most likely unneccessary
@@ -147,8 +144,8 @@ class BaseAPIOperator(BaseOperator):
             self.log.error(f"Failed to convert response to JSON: {response.url}")
             return None
 
-    def _api_id_to_document(self, _id: str, batch_name: str, batch_id: int):
-        return {"api_id": str(_id), "batch_id": f"{batch_name}{batch_id}"}
+    def _api_id_to_document(self, _id: str, name: str, batch_id: int):
+        return {"api_id": str(_id), "batch_id": f"{name}{batch_id}"}
 
     def _default_query_builder(self) -> dict:
         return {}
