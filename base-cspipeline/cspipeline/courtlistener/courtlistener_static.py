@@ -2,7 +2,7 @@ from airflow import DAG
 from airflow.utils.dates import datetime, days_ago, timedelta
 from airflow.operators.python import PythonOperator, ShortCircuitOperator
 
-from .courtlistener import (
+from .functions import (
     check_more,
     parser,
     next_page,

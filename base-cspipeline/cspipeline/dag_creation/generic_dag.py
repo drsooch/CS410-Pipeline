@@ -1,6 +1,6 @@
 import random
 from string import ascii_letters
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator, ShortCircuitOperator
@@ -47,14 +47,14 @@ def _continue(batch_name, **kwargs):
 
 def construct_paging_dag(
     dag_id: str,
-    paging_args: Dict[str, Any],  # pass a dictionary of kwargs to PagingOp
+    paging_args: Dict[str, Any],
     key_map: Dict[str, Any],
-    extract_fn,  # TODO delete
-    transform_fn,  # TODO delete
+    key_list: List[str],
     start_date=days_ago(1),
     schedule=None,
     number_of_batches=5,
     default_dag_args=None,
+    dag_kwargs=None,
 ):
     """
     Construct a DAG with an endpoint that responds with pages.
@@ -64,32 +64,40 @@ def construct_paging_dag(
     :param paging_args: Kwargs for APIPagingOperator
     :type paging_args: dict
     :param key_map: Map from API Response to Internal Data Model
-    :type key_map: dict
+    :type key_map: dict of internal data model fields to fields from API response
+    :param key_list: List of API Response fields to create Unique ID
+    :type key_list: list of field names
     :param start_date: Date for DAG to start
     :type start_date: str
     :param schedule: Scheduling for DAG, see Airflow Docs.
     :type str: str
     :param number_of_batches: Number of Batches to use in the DAG.
     :type number_of_batches: int
-    :param default_dag_args: Default Arguments to pass to DAG (and its operators)
+    :param default_dag_args: Default Arguments to pass through @apply_defaults
     :type default_dag_args: dict
+    :param dag_kwargs: Keyword Arguments to pass to DAG
+    :type dag_kwargs: dict
     """
 
     if default_dag_args is None:
         default_dag_args = default_args
+
+    if dag_kwargs is None:
+        dag_kwargs = dict()
 
     dag = DAG(
         dag_id=dag_id,
         default_args=default_dag_args,
         start_date=start_date,
         schedule_interval=schedule,
+        **dag_kwargs,
     )
 
     start_op = APIPagingOperator(
         task_id=START_OP_ID,
         batch_name=dag_id,
-        **paging_args,
         dag=dag,
+        **paging_args,
     )
 
     no_results = ShortCircuitOperator(
@@ -109,7 +117,7 @@ def construct_paging_dag(
         transform = PythonOperator(
             task_id=TRANSFORM_OP_ID.format(batch_id),
             python_callable=transform,
-            op_args=[dag_id + str(batch_id)],
+            op_args=[dag_id + str(batch_id), key_map, key_list],
         )
 
         no_results >> extract >> transform

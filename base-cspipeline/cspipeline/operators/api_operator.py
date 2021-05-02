@@ -56,6 +56,7 @@ class BaseAPIOperator(BaseOperator):
         number_of_batches: int,
         http_conn_id: str,
         mongo_conn_id: str,
+        batch_name: str,
         response_valid: Callable[[requests.Response], bool] = None,
         query_builder: Callable[[None], str] = None,
         header: Optional[Dict[str, str]] = None,
@@ -78,6 +79,7 @@ class BaseAPIOperator(BaseOperator):
 
         self.http_conn_id = http_conn_id
         self.mongo_conn_id = mongo_conn_id
+        self.batch_name = batch_name
 
         # Functions for operating on response data
         self.parser = parser
