@@ -2,38 +2,22 @@ from airflow import DAG
 from airflow.utils.dates import datetime, days_ago, timedelta
 from airflow.operators.python import PythonOperator, ShortCircuitOperator
 
-from cspipeline.scripts.courtlistener import (
+from cspipeline.courtlistener import (
     check_more,
     daily_query,
     next_page,
     parser,
     response_count,
     response_valid,
+    COURT_LISTENER_KEY_LIST,
+    COURT_LISTENER_MAPPING,
 )
 
 from cspipeline.operators import (
     APIPagingOperator,
-    COURT_LISTENER_KEY_LIST,
-    COURT_LISTENER_MAPPING,
     transform,
     extract,
 )
-
-# from .start_request import (
-#     check_more,
-#     parser,
-#     next_page,
-#     response_count,
-#     response_valid,
-#     daily_query,
-# )
-# from internal.paging_operator import APIPagingOperator
-# from internal.extract import extract
-# from internal.transform import (
-#     _transform,
-#     COURT_LISTENER_KEY_LIST,
-#     COURT_LISTENER_MAPPING,
-# )
 
 # just some globals to keep around
 START_OP_ID = "start_op"
@@ -54,7 +38,7 @@ default_args = {
     "retry_delay": timedelta(seconds=25),
     "number_of_batches": 5,
     "log_response": True
-    # 'execution_timeout': timedelta(seconds=300),
+#    'execution_timeout': timedelta(seconds=300),
 }
 
 daily_paging_args = {
@@ -67,6 +51,7 @@ daily_paging_args = {
     "endpoint": "opinions",
     "http_conn_id": "default_api",
     "mongo_conn_id": "default_mongo",
+    "batch_name": DAG_ID
 }
 
 
