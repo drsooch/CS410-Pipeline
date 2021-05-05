@@ -47,7 +47,12 @@ def transform(batch_name: str, mapping: dict, keys: list) -> None:
             unique_id = generate_id(build_seed(data, keys))
             output_data["_id"] = unique_id
             output_data["retrieved"] = datetime.utcnow().isoformat()
-            court_documents_coll.insert_one(output_data)
+
+            # Replace the document with new information if it exists
+            # Upsert will insert if no document found
+            court_documents_coll.replace_one(
+                {"_id": unique_id}, output_data, upsert=True
+            )
 
         except Exception as error:
             print(f"An exception occured while processing batch {batch_name}:\n{error}")

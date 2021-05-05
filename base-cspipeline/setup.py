@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 DESCRIPTION = "Basic ETL Pipeline construction for Airflow"
 LONG_DESCRIPTION = "TODO"
 
