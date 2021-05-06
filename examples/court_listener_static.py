@@ -13,11 +13,7 @@ from cspipeline.courtlistener import (
     COURT_LISTENER_MAPPING,
 )
 
-from cspipeline.operators import (
-    APIPagingOperator,
-    transform,
-    extract,
-)
+from cspipeline.operators import APIPagingOperator, transform, extract, NoDataOperator
 
 # just some globals to keep around
 START_OP_ID = "start_op"
@@ -38,7 +34,7 @@ default_args = {
     "retry_delay": timedelta(seconds=25),
     "number_of_batches": 5,
     "log_response": True
-#    'execution_timeout': timedelta(seconds=300),
+    #    'execution_timeout': timedelta(seconds=300),
 }
 
 daily_paging_args = {
@@ -51,7 +47,7 @@ daily_paging_args = {
     "endpoint": "opinions",
     "http_conn_id": "default_api",
     "mongo_conn_id": "default_mongo",
-    "batch_name": DAG_ID
+    "batch_name": DAG_ID,
 }
 
 
@@ -77,9 +73,9 @@ with DAG(
         dag=dag,
     )
 
-    no_results = ShortCircuitOperator(task_id="no_results", python_callable=_continue)
+    no_data = NoDataOperator(task_id="no_data")
 
-    start_op >> no_results
+    start_op >> no_data
 
     for batch_id in range(1, NUMBER_OF_BATCHES + 1):
         extract_op = PythonOperator(
@@ -98,4 +94,4 @@ with DAG(
             ],
         )
 
-        no_results >> extract_op >> transform_op
+        no_data >> extract_op >> transform_op

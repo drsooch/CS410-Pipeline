@@ -24,7 +24,7 @@ class BaseAPIOperator(BaseOperator):
                    Should return a list of strings.
     :type parser: function that takes a requests.Response object and returns a list of sub-endpoints
     :param response_count: Function that returns number of items in API response
-    :type response_count_more: Callable[[requests.Response], int]
+    :type response_count: Callable[[requests.Response], int]
     :param number_of_batches: Number of batches used in the DAG Run.
     :type number_of_batches: int
     :param http_conn_id: Airflow Connection variable name for the base API URL.

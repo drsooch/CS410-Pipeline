@@ -29,18 +29,26 @@ import uuid
 
 from airflow.providers.mongo.hooks.mongo import MongoHook
 from airflow.utils.dates import datetime
+from airflow.exceptions import AirflowException
 
 
-def transform(batch_name: str, mapping: dict, keys: list) -> None:
+def transform(batch_id: str, mapping: dict, keys: list) -> None:
+
+    if len(mapping) == 0:
+        raise AirflowException("Mapping provided is empty")
+
+    if len(keys) == 0:
+        raise AirflowException("Unique Keys provided is empty")
+
     mongo_conn = MongoHook(conn_id="default_mongo")
     results_to_transform_coll = mongo_conn.get_collection(
         "results_to_transform", "courts"
     )
     court_documents_coll = mongo_conn.get_collection("court_documents", "courts")
 
-    while results_to_transform_coll.find_one({"batch_id": batch_name}):
+    while results_to_transform_coll.find_one({"batch_id": batch_id}):
 
-        data = results_to_transform_coll.find_one_and_delete({"batch_id": batch_name})
+        data = results_to_transform_coll.find_one_and_delete({"batch_id": batch_id})
 
         try:
             output_data = build_data(data, mapping)
@@ -55,7 +63,7 @@ def transform(batch_name: str, mapping: dict, keys: list) -> None:
             )
 
         except Exception as error:
-            print(f"An exception occured while processing batch {batch_name}:\n{error}")
+            print(f"An exception occured while processing batch {batch_id}:\n{error}")
             results_to_transform_coll.insert_one(data)
 
 

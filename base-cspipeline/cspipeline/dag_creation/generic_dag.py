@@ -5,9 +5,9 @@ from typing import Any, Dict, List
 from airflow import DAG
 from airflow.operators.python import PythonOperator, ShortCircuitOperator
 from airflow.utils.dates import days_ago, timedelta
-from cspipeline.operators import APIPagingOperator, transform, extract
+from cspipeline.operators import APIPagingOperator, extract, NoDataOperator, transform
 
-default_args = {
+apply_default_args = {
     "owner": "airflow",
     "depends_on_past": False,
     "email_on_failure": False,
@@ -36,24 +36,15 @@ def _generate_random_batch_name() -> str:
     return "".join(random.choices(ascii_letters, k=10))
 
 
-def _continue(batch_name, **kwargs):
-    """For use with ShortCircuitOperator. Checks to see if the APIOperator returns a SKIP Message."""
-    ti = kwargs["ti"]
-    should_continue = ti.xcom_pull(task_ids=START_OP_ID, key=SKIP_KEY)
-
-    # if there are updates to be done, we won't find a key
-    return should_continue is None
-
-
 def construct_paging_dag(
     dag_id: str,
-    paging_args: Dict[str, Any],
+    paging_kwargs: Dict[str, Any],
     key_map: Dict[str, Any],
     key_list: List[str],
     start_date=days_ago(1),
     schedule=None,
     number_of_batches=5,
-    default_dag_args=None,
+    default_args=None,
     dag_kwargs=None,
 ):
     """
@@ -79,15 +70,15 @@ def construct_paging_dag(
     :type dag_kwargs: dict
     """
 
-    if default_dag_args is None:
-        default_dag_args = default_args
+    if default_args is None:
+        default_args = apply_default_args
 
     if dag_kwargs is None:
         dag_kwargs = dict()
 
     dag = DAG(
         dag_id=dag_id,
-        default_args=default_dag_args,
+        default_args=default_args,
         start_date=start_date,
         schedule_interval=schedule,
         **dag_kwargs,
@@ -97,14 +88,12 @@ def construct_paging_dag(
         task_id=START_OP_ID,
         batch_name=dag_id,
         dag=dag,
-        **paging_args,
+        **paging_kwargs,
     )
 
-    no_results = ShortCircuitOperator(
-        task_id="no_results", python_callable=_continue, op_args=[dag_id]
-    )
+    no_data = NoDataOperator(task_id="no_data")
 
-    start_op >> no_results
+    start_op >> no_data
 
     for batch_id in range(1, number_of_batches + 1):
         extract = PythonOperator(
@@ -120,6 +109,6 @@ def construct_paging_dag(
             op_args=[dag_id + str(batch_id), key_map, key_list],
         )
 
-        no_results >> extract >> transform
+        no_data >> extract >> transform
 
     return dag
