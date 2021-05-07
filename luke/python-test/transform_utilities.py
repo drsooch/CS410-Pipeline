@@ -37,7 +37,7 @@ def transform(input_string: str, mapping: dict, keys: list) -> str:
     data = json.loads(input_string, strict=False)
     output_data = build_data(data, mapping)
     uuid = generate_id(build_seed(data, keys))
-    output_data['id'] = uuid
+    output_data['_id'] = uuid
     return json.dumps(output_data, indent=2)
 
 
@@ -92,7 +92,6 @@ def main():
 
     # Key mapping from internal data model to source model
     MAPPING = {
-        'id': '',
         'metadata':
         {
             'api_id': 'id',
