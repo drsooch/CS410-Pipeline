@@ -140,7 +140,7 @@ def build_data(data: dict, mapping: dict) -> dict:
     return output
 
 
-def find_by_key(target: str, data: dict) -> Any:
+def find_by_key(target: str, data: dict) -> str:
     """
     Returns the value of the target key from a nested Python dictionary.
     """

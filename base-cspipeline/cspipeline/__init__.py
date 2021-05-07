@@ -13,13 +13,15 @@ from .courtlistener import (
     response_valid,
 )
 from .dag_creation import construct_paging_dag, court_listener_dag, generic_dag
-from .operators import APIPagingOperator, APISinglePageOperator, extract, transform
+from .operators import APIPagingOperator, APISinglePageOperator, extract, transform, local_transform, local_batch
 
 __all__ = [
     "APIPagingOperator",
     "APISinglePageOperator",
     "transform",
     "extract",
+    "local_transform",
+    "local_batch",
     "construct_paging_dag",
     "court_listener_dag",
     "generic_dag",
